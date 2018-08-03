@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <title>Websocket Simulator</title>
+    <style>
+       #map {
+        height: 80vh;
+        width: 100%;
+       }
+    </style>
+  </head>
+  <body>
+    <h3>Websocket Simulator</h3>
+    <div style="margin-bottom:10px;">
+      <button onclick="simulate()">Simulate</button>
+
+      <button onclick="goNorth(10)">North (W)</button>
+      <button onclick="goSouth(10)">South (S)</button>
+      <button onclick="goEast(10)">East (D)</button>
+      <button onclick="goWest(10)">West (A)</button>
+
+      <button id="drop" onclick="drop()">Spawn pokemon</button>
+    </div>
+    <div id="map"></div>
+    
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyA_SJF2_SlIVXktzMZnrm5BTcrIwdoEq78&callback=initMap"></script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.6/socket.io.min.js"></script>
+    <script>
+      var neighborhoods = [
+          {lat: -6.196860408295286, lng: 106.77149358602283},
+          {lat: -6.203148615284119, lng: 106.78406999999993},
+          {lat: -6.201351984715881, lng: 106.78586663056804},
+          {lat: -6.201351984715881, lng: 106.79754472926106}
+      ];
+
+      var marker;
+      var markers = [];
+      var map;
+
+      var icons = {
+        reshiram: "http://orig13.deviantart.net/4d8f/f/2010/296/a/4/reshiram_goes_rawr__icon__by_kiashichan5000-d31c9k8.gif",
+        pikachu: "https://cdn.bulbagarden.net/upload/thumb/0/0d/025Pikachu.png/35px-025Pikachu.png",
+        charmender: "https://vignette.wikia.nocookie.net/nintendo/images/d/d1/PKMN004.png/revision/latest?cb=20120527010430&path-prefix=en",
+        mew: "https://vignette.wikia.nocookie.net/pokemontowerdefensethree/images/7/75/151_elemental_fire_icon.png/revision/latest?cb=20170416053244",
+      }
+
+      function initSocketIO() {
+        var domain = "127.0.0.1";
+        var port = 5000;
+        var socket = io.connect('http://' + domain + ':' + port);
+        socket.on('connect', function() {
+          socket.emit('join', {data: 'I\'m connected!'});
+        });
+        socket.on('walk', function(msg) {
+          var latlong = msg.latlong.split(',');
+          console.log(latlong);
+          changeMarkerPosition(marker, latlong);
+        });
+      }
+
+      function changeMarkerPosition(marker, latlong) {
+        console.log(latlong);
+        var latlng = new google.maps.LatLng(parseFloat(latlong[0]), parseFloat(latlong[1]));
+        marker.setPosition(latlng);
+      }
+
+      function initMap() {
+        var binus = {lat: -6.2022503, lng: 106.78407};
+        map = new google.maps.Map(document.getElementById('map'), {
+          zoom: 15,
+          center: binus,
+          fullscreenControl: true
+        });
+        marker = new google.maps.Marker({
+          position: binus,
+          map: map,
+          icon: icons.pikachu
+        });
+        marker.addListener('click', toggleBounce);
+      }
+
+      function drop() {
+        clearMarkers();
+        console.log('drop marker...');
+        
+        for (var i = 0; i < neighborhoods.length; i++) {
+          console.log(i);
+          addMarkerWithTimeout(neighborhoods[i], i * 200);
+        }
+      }
+
+      function addMarkerWithTimeout(position, timeout) {
+        window.setTimeout(function() {
+          markers.push(new google.maps.Marker({
+            position: position,
+            map: map,
+            animation: google.maps.Animation.DROP,
+            icon: icons.reshiram
+          }));
+        }, timeout);
+      }
+
+      function clearMarkers() {
+        for (var i = 0; i < markers.length; i++) {
+          markers[i].setMap(null);
+        }
+        markers = [];
+      }
+
+      function toggleBounce() {
+        if (marker.getAnimation() !== null) {
+          marker.setAnimation(null);
+        } else {
+          marker.setAnimation(google.maps.Animation.BOUNCE);
+        }
+      }
+
+      function simulate() {
+        console.log("simulate...");
+        axios.get('/simulate')
+        .then(function (response) {
+            console.log(response);
+        })
+        .catch(function (error) {
+            console.log(error);;
+        });
+      }
+
+      var R = 6378137;
+      function goNorth(speed=100) {  // default 100 meter
+        var lat = marker.getPosition().lat();
+        var lng = marker.getPosition().lng();
+        var dLat = speed/R;
+        lat = lat + dLat * 180/Math.PI;
+        changeMarkerPosition(marker, [lat, lng]);
+      }
+
+      function goSouth(speed=100) {
+        var lat = marker.getPosition().lat();
+        var lng = marker.getPosition().lng();
+        var dLat = speed/R;
+        lat = lat - dLat * 180/Math.PI;
+        changeMarkerPosition(marker, [lat, lng]);
+      }
+
+      function goWest(speed=100) {
+        var lat = marker.getPosition().lat();
+        var lng = marker.getPosition().lng();
+        var dLng = speed/R;
+        lng = lng - dLng * 180/Math.PI;
+        changeMarkerPosition(marker, [lat, lng]);
+      }
+
+      function goEast(speed=100) {
+        var lat = marker.getPosition().lat();
+        var lng = marker.getPosition().lng();
+        var dLng = speed/R;
+        lng = lng + dLng * 180/Math.PI;
+        changeMarkerPosition(marker, [lat, lng]);
+      }
+
+      $(document).keyup(function(e) {
+        var key = e.keyCode;
+        var speed = 100
+        switch(key){
+          case 87: goNorth(speed); break;
+          case 83: goSouth(speed); break;
+          case 68: goEast(speed); break;
+          case 65: goWest(speed); break;
+        }
+
+      });
+
+      initSocketIO();
+    </script>
+  </body>
+</html>
